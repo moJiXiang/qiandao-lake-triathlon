@@ -1,0 +1,1181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>千岛湖铁三 · 路线轨迹播放</title>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #1c2834; }
+    #map { width: 100%; height: 100%; }
+    .panel {
+      position: absolute; top: 14px; left: 14px; z-index: 100;
+      width: 292px; max-height: calc(100% - 28px); overflow: auto;
+      background: rgba(255,255,255,0.96); backdrop-filter: blur(10px);
+      border-radius: 14px; padding: 14px 14px 12px;
+      box-shadow: 0 8px 28px rgba(16, 42, 67, 0.18);
+    }
+    .eyebrow { font-size: 11px; letter-spacing: 0.08em; color: #5d7c93; font-weight: 700; }
+    h3 { margin: 2px 0 10px; font-size: 16px; font-weight: 750; }
+    .btn-group, .speeds { display: flex; gap: 6px; margin-bottom: 8px; }
+    .btn-group button, .speeds button, .play-controls button {
+      border-radius: 8px; cursor: pointer; font-size: 13px;
+    }
+    .btn-group button, .speeds button {
+      flex: 1; padding: 7px 0; border: 1.5px solid #d5dee6; background: #fff; color: #345;
+    }
+    .btn-group button.active, .speeds button.active {
+      border-color: #0b6e8a; background: #e7f5f8; color: #0b6e8a; font-weight: 700;
+    }
+    .play-controls { display: flex; gap: 6px; }
+    .play-controls button { flex: 1; padding: 8px 0; border: none; font-weight: 650; }
+    #btn-play { background: #0b6e8a; color: #fff; }
+    #btn-pause { background: #e8eef2; color: #234; }
+    #btn-reset { background: #f3f6f8; color: #234; }
+    .play-controls button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .status { margin-top: 10px; background: #f4f8fa; border-radius: 10px; padding: 8px 10px; }
+    .status .leg { font-size: 14px; font-weight: 750; }
+    .status .sub { margin-top: 2px; font-size: 12px; color: #4d6474; line-height: 1.45; }
+    .bar { margin-top: 8px; height: 8px; background: #d9e3ea; border-radius: 99px; cursor: pointer; position: relative; }
+    .bar > i { display: block; height: 100%; width: 0%; border-radius: 99px; background: #0b6e8a; }
+    .legend { margin-top: 10px; font-size: 12px; color: #3d5160; line-height: 1.7; }
+    .legend-item { display: flex; align-items: center; gap: 7px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+    .note { margin-top: 8px; font-size: 11px; color: #8aa; line-height: 1.45; }
+    .edit-row { display: flex; gap: 6px; margin-top: 8px; }
+    .edit-row button {
+      flex: 1; padding: 7px 0; border: 1.5px solid #d5dee6; border-radius: 8px;
+      background: #fff; color: #345; font-size: 13px; cursor: pointer;
+    }
+    #btn-edit.active { border-color: #c2410c; background: #fff4ed; color: #c2410c; font-weight: 700; }
+    .edit-tools { display: none; margin-top: 8px; }
+    .panel.editing .edit-tools { display: block; }
+    .route-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-bottom: 7px; }
+    .route-grid button, .point-actions button, .point-grid button {
+      padding: 6px 4px; font-size: 12px; cursor: pointer;
+      border: 1.5px solid #d5dee6; background: #fff; border-radius: 8px; color: #234;
+    }
+    .route-grid button.active, .point-actions button.active, .point-grid button.active {
+      border-color: #c2410c; background: #fff4ed; color: #c2410c; font-weight: 700;
+    }
+    .point-actions { display: flex; gap: 6px; margin-bottom: 7px; }
+    .point-actions button { flex: 1; }
+    .point-actions button:disabled { opacity: .42; cursor: not-allowed; }
+    .point-grid {
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px;
+      max-height: 116px; overflow: auto; padding-right: 2px;
+    }
+    .point-grid button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #edit-hint { display: none; color: #9a3412; }
+    #anchor-export {
+      display: none; width: 100%; box-sizing: border-box; margin-top: 8px;
+      min-height: 88px; padding: 6px; resize: vertical;
+      border: 1px solid #d5dee6; border-radius: 8px;
+      font: 11px/1.45 ui-monospace, Consolas, monospace; color: #234;
+    }
+    #anchor-export.show { display: block; }
+    .panel.editing #edit-hint { display: block; }
+    .edit-pin {
+      position: relative; border-radius: 50%; border: 3px solid #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,.35); transform: translate(-50%, -50%); cursor: grab;
+    }
+    .edit-pin span {
+      position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%);
+      background: #fff; color: #1c2834; font-size: 12px; font-weight: 700;
+      padding: 2px 7px; border-radius: 999px; box-shadow: 0 2px 8px rgba(0,0,0,.16);
+      white-space: nowrap; pointer-events: none;
+    }
+    .athlete-label {
+      background: #fff; border-radius: 999px; padding: 2px 8px; font-size: 12px; font-weight: 700;
+      box-shadow: 0 2px 8px rgba(0,0,0,.18); white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+<div class="panel">
+  <div class="eyebrow">2026 STC QIAN DAO LAKE</div>
+  <h3>千岛湖铁三路线</h3>
+  <div class="btn-group">
+    <button id="btn-olympic" class="active" type="button">标铁 OD</button>
+    <button id="btn-113" type="button">大铁 113</button>
+  </div>
+  <div class="play-controls">
+    <button id="btn-play" type="button">播放</button>
+    <button id="btn-pause" type="button" disabled>暂停</button>
+    <button id="btn-reset" type="button" disabled>重置</button>
+  </div>
+  <div class="speeds" style="margin-top:8px">
+    <button type="button" data-speed="0.5">0.5×</button>
+    <button type="button" data-speed="1" class="active">1×</button>
+    <button type="button" data-speed="2">2×</button>
+    <button type="button" data-speed="4">4×</button>
+  </div>
+  <div class="edit-row">
+    <button id="btn-edit" type="button">编辑点位</button>
+    <button id="btn-copy" type="button">复制坐标</button>
+    <button id="btn-restore" type="button">恢复默认</button>
+  </div>
+  <textarea id="anchor-export" readonly spellcheck="false"></textarea>
+  <div class="edit-tools">
+    <div class="route-grid" id="route-grid">
+      <button type="button" data-route="swim">游泳</button>
+      <button type="button" data-route="exit">至换项</button>
+      <button type="button" data-route="bike" class="active">骑行</button>
+      <button type="button" data-route="run">跑步</button>
+      <button type="button" data-route="venue">换项区</button>
+    </div>
+    <div class="point-actions">
+      <button id="btn-add-point" type="button">＋ 增加途经点</button>
+      <button id="btn-delete-point" type="button">删除选中点</button>
+    </div>
+    <div class="point-grid" id="point-grid"></div>
+  </div>
+  <div class="note" id="edit-hint">选择一条线路，可逐点拖动，或点击“增加途经点”后在地图上落点。</div>
+  <div class="status">
+    <div class="leg" id="leg-name">准备就绪</div>
+    <div class="sub" id="leg-sub">标铁：游泳 1.5 km · 骑行 45 km · 跑步 10.55 km</div>
+  </div>
+  <div class="bar" id="bar" title="拖动进度"><i id="bar-fill"></i></div>
+  <div class="legend">
+    <div class="legend-item"><span class="dot" style="background:#2196F3"></span> 游泳 · 进贤湾码头逆时针绕标</div>
+    <div class="legend-item"><span class="dot" style="background:#FF9800"></span> T1 · 游泳出口到换项区，可加途经点</div>
+    <div class="legend-item"><span class="dot" style="background:#4CAF50"></span> 骑行 · 单圈 45 km，113 组 2 圈</div>
+    <div class="legend-item"><span class="dot" style="background:#E91E63"></span> 跑步 · 单圈 10.55 km，113 组 2 圈</div>
+  </div>
+  <div class="note">游泳在进贤湾码头外水道绕标。骑行沿淳开线、环左线、左光线、丰茂大桥、文左线到东北湖区游客中心后原路折返。跑步沿内侧绿道顺时针到远端折返后原路返回。播放里程按官方距离计算。</div>
+</div>
+<script>
+const BIKE_OUT = [[119.034269,29.642338],[119.023625,29.652339],[119.024808,29.678079],[119.028116,29.682996],[119.039541,29.68328],[119.059407,29.679889],[119.076842,29.699695],[119.098349,29.700318],[119.117923,29.716484],[119.140848,29.73098],[119.162406,29.740787]];
+const SWIM = { "113": [[119.037696,29.643354],[119.038412,29.643854],[119.039036,29.644641],[119.0396,29.64579],[119.039901,29.64712],[119.039715,29.648568],[119.03954,29.649066],[119.039542,29.649289],[119.039435,29.649409],[119.039422,29.648592],[119.039608,29.647143],[119.039307,29.645814],[119.038742,29.644664],[119.038118,29.643878],[119.037402,29.643377]], olympic: [[119.037696,29.643354],[119.038308,29.644108],[119.0389,29.644875],[119.039435,29.645592],[119.040196,29.646739],[119.041585,29.648682],[119.041253,29.648968],[119.040288,29.647579],[119.039568,29.646467],[119.03907,29.645729],[119.038468,29.644844],[119.03807,29.644293],[119.037428,29.643454]] };
+const RUN_OUT = [[119.034291,29.64236],[119.02366,29.65229],[119.031578,29.657129],[119.028898,29.67284],[119.042173,29.682692]];
+const DEFAULT_VENUE = [119.034029, 29.642764];
+let venue = DEFAULT_VENUE.slice();
+
+const BIKE_MARKS = [
+  [0.00, "淳开线"],
+  [0.15, "环左线"],
+  [0.20, "进贤湾大桥"],
+  [0.35, "毛岭隧道"],
+  [0.40, "下栏坞隧道"],
+  [0.56, "左光线"],
+  [0.69, "丰茂大桥"],
+  [0.81, "文左线"],
+  [1.00, "东北湖区游客中心"]
+];
+
+const RACE_META = {
+  olympic: { swim: 1.5, bikeLaps: 1, runLaps: 1, total: 57.05, label: "标铁" },
+  "113": { swim: 1.9, bikeLaps: 2, runLaps: 2, total: 113, label: "大铁 113" }
+};
+
+let map, race = "olympic", speed = 1, editMode = false, didFit = false, draggingId = null;
+let timer = null, playing = false, clock = 0, lastTs = 0;
+let athlete = null, athleteLabel = null, progressLine = null;
+let staticLines = [], markers = [], doneLines = [];
+let drawnSlice = -1;
+let timeline = [];
+let framedKey = "";
+
+function hav(a, b) {
+  const R = 6371000;
+  const r = Math.PI / 180;
+  const dLat = (b[1] - a[1]) * r, dLng = (b[0] - a[0]) * r;
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * r) * Math.cos(b[1] * r) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+function densify(path, step) {
+  if (!path.length) return [];
+  const out = [[path[0][0], path[0][1]]];
+  for (let i = 1; i < path.length; i++) {
+    const d = hav(path[i - 1], path[i]);
+    const n = Math.max(1, Math.ceil(d / step));
+    for (let k = 1; k <= n; k++) {
+      const t = k / n;
+      out.push([
+        path[i - 1][0] + (path[i][0] - path[i - 1][0]) * t,
+        path[i - 1][1] + (path[i][1] - path[i - 1][1]) * t
+      ]);
+    }
+  }
+  return out;
+}
+function outAndBack(out) {
+  if (out.length < 2) return [];
+  const back = out.slice(0, -1).reverse();
+  return densify(out.concat(back), 40);
+}
+function atFraction(path, f) {
+  if (f <= 0) return path[0];
+  if (f >= 1) return path[path.length - 1];
+  const idx = f * (path.length - 1);
+  const i = Math.floor(idx);
+  const t = idx - i;
+  const a = path[i], b = path[Math.min(path.length - 1, i + 1)];
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+function sliceFraction(path, f) {
+  const n = Math.max(2, Math.round(f * (path.length - 1)) + 1);
+  const cut = path.slice(0, n);
+  cut.push(atFraction(path, f));
+  return cut;
+}
+
+function pathMeters(path) {
+  let meters = 0;
+  for (let i = 1; i < path.length; i++) meters += hav(path[i - 1], path[i]);
+  return meters;
+}
+function transitionHold(path) {
+  return Math.min(7, Math.max(3.6, pathMeters(path) / 90));
+}
+function buildTimeline() {
+  const meta = RACE_META[race];
+  const swim = densify(SWIM[race], 18);
+  const t1 = densify(shorePath().concat([anchors.bikeStart]), 12);
+  const bike = outAndBack(BIKE_OUT);
+  const run = outAndBack(RUN_OUT);
+  const t2 = densify([anchors.venue, anchors.runStart], 12);
+  const segs = [
+    { name: "游泳", color: "#2196F3", km: meta.swim, laps: 1, path: swim, kind: "swim" },
+    { name: "T1 换项", color: "#FF9800", km: 0, laps: 1, path: t1, kind: "t", hold: transitionHold(t1) },
+    { name: "自行车", color: "#4CAF50", km: 45, laps: meta.bikeLaps, path: bike, kind: "bike" },
+    { name: "T2 换项", color: "#FF9800", km: 0, laps: 1, path: t2, kind: "t", hold: transitionHold(t2) },
+    { name: "跑步", color: "#E91E63", km: 10.55, laps: meta.runLaps, path: run, kind: "run" }
+  ];
+  timeline = [];
+  segs.forEach(seg => {
+    for (let lap = 0; lap < seg.laps; lap++) {
+      timeline.push({ seg, lap, km: seg.km, dur: 0 });
+    }
+  });
+  const kmSum = raceKm() || 1;
+  timeline.forEach(slice => {
+    slice.dur = slice.km > 0 ? (slice.km / kmSum) * 48 : (slice.seg.hold || 1.6);
+  });
+  return segs;
+}
+
+function raceKm() {
+  return timeline.reduce((s, t) => s + t.km, 0);
+}
+function totalDur() {
+  return timeline.reduce((s, t) => s + t.dur, 0);
+}
+function locateClock(t) {
+  let left = Math.max(0, t);
+  for (let i = 0; i < timeline.length; i++) {
+    const slice = timeline[i];
+    if (left <= slice.dur || i === timeline.length - 1) {
+      const f = slice.dur ? Math.min(1, left / slice.dur) : 1;
+      const into = slice.km * f;
+      const done = timeline.slice(0, i).reduce((s, x) => s + x.km, 0) + into;
+      return { slice, f, into, done, i };
+    }
+    left -= slice.dur;
+  }
+}
+function clockForKm(km) {
+  let left = Math.max(0, km), t = 0;
+  for (const slice of timeline) {
+    if (slice.km <= 0) { t += slice.dur; continue; }
+    if (left <= slice.km) return t + slice.dur * (left / slice.km);
+    left -= slice.km;
+    t += slice.dur;
+  }
+  return totalDur();
+}
+
+function roadName(f) {
+  const outbound = f <= 0.5;
+  const u = outbound ? f * 2 : (1 - f) * 2;
+  let name = BIKE_MARKS[0][1];
+  for (const m of BIKE_MARKS) if (u + 1e-6 >= m[0]) name = m[1];
+  return (outbound ? "去程 · " : "返程 · ") + name;
+}
+
+function clearDrawn() {
+  staticLines.forEach(l => l.setMap(null));
+  markers.forEach(m => m.setMap(null));
+  staticLines = []; markers = [];
+  if (progressLine) { progressLine.setMap(null); progressLine = null; }
+  doneLines.forEach(l => l.setMap(null));
+  doneLines = [];
+  drawnSlice = -1;
+  if (athlete) { athlete.setMap(null); athlete = null; }
+  if (athleteLabel) { athleteLabel.setMap(null); athleteLabel = null; }
+}
+function addLine(path, color, weight, opacity, z) {
+  const line = new AMap.Polyline({
+    path,
+    strokeColor: color,
+    strokeWeight: Math.max(weight, 6),
+    strokeOpacity: Math.max(opacity, 0.95),
+    isOutline: true,
+    outlineColor: "#ffffff",
+    borderWeight: 2,
+    lineJoin: "round",
+    lineCap: "round",
+    zIndex: z || 50,
+    map
+  });
+  staticLines.push(line);
+  return line;
+}
+function addMarker(pos, title, color) {
+  const marker = new AMap.Marker({
+    position: pos, map, title,
+    content: `<div style="background:${color};color:#fff;font-size:12px;font-weight:700;padding:3px 8px;border-radius:999px;box-shadow:0 2px 8px rgba(0,0,0,.25);white-space:nowrap;border:2px solid #fff">${title}</div>`,
+    offset: new AMap.Pixel(-8, -14),
+    zIndex: 120
+  });
+  markers.push(marker);
+}
+function addBuoy(pos, text, far) {
+  const marker = new AMap.CircleMarker({
+    center: pos, radius: far ? 7 : 5, map,
+    strokeColor: far ? "#c62828" : "#0d47a1", strokeWeight: 2,
+    fillColor: far ? "#ff7043" : "#ffffff", fillOpacity: 0.95, zIndex: 80
+  });
+  markers.push(marker);
+  if (text) {
+    const label = new AMap.Text({
+      text, position: pos, map,
+      offset: new AMap.Pixel(8, -8),
+      style: { "background": "transparent", "border": "none", "color": "#083", "font-size": "11px", "font-weight": "700", "text-shadow": "0 1px 2px #fff" },
+      zIndex: 81
+    });
+    markers.push(label);
+  }
+}
+
+function renderCourse() {
+  clearDrawn();
+  const segs = buildTimeline();
+  segs.forEach(seg => {
+    if (seg.path.length < 2) return;
+    addLine(seg.path, seg.color, seg.kind === "t" ? 4 : 5, 0.28, 40);
+  });
+  const swim = segs[0].path;
+  const buoyStep = race === "113" ? 0.12 : 0.16;
+  for (let f = buoyStep; f < 0.48; f += buoyStep) addBuoy(atFraction(swim, f), "", false);
+  addBuoy(atFraction(swim, 0.5), "", true);
+  if (!editMode) {
+    addMarker(venue, "换项区 · 进贤湾", "#0b6e8a");
+    addMarker(atFraction(swim, 0.5), race === "113" ? "游泳折返 1.9km" : "游泳折返 1.5km", "#1565c0");
+    addMarker(anchors.bikeFar, "骑行折返 · 东北湖区游客中心", "#2e7d32");
+    addMarker(anchors.runFar, "跑步折返", "#c2185b");
+  }
+  if (!didFit && bikeRoad && runRoad) {
+    map.setFitView(staticLines, false, [70, 40, 330, 40]);
+    didFit = true;
+  }
+  if (editMode) syncEditHandles();
+  clock = 0;
+  updateHud();
+}
+
+function framePlayback(seg) {
+  const key = seg.kind === "t" ? race + ":" + seg.name : "course";
+  if (!map || framedKey === key) return;
+  framedKey = key;
+  if (seg.kind === "t" && seg.path && seg.path.length > 1) {
+    map.setFitView([new AMap.Polyline({ path: seg.path })], false, [100, 100, 380, 80], 17);
+  } else if (staticLines.length) {
+    map.setFitView(staticLines, false, [70, 40, 330, 40]);
+  }
+}
+function ensureAthlete(color) {
+  if (!athlete) {
+    athlete = new AMap.CircleMarker({
+      center: venue, radius: 8, map,
+      strokeColor: "#fff", strokeWeight: 3,
+      fillColor: color, fillOpacity: 1, zIndex: 300
+    });
+    athleteLabel = new AMap.Marker({
+      position: venue, map, offset: new AMap.Pixel(12, -14), zIndex: 301,
+      content: `<div class="athlete-label" id="athlete-text"></div>`
+    });
+  }
+  athlete.setOptions({ fillColor: color });
+}
+function setAthlete(pos, text, color) {
+  ensureAthlete(color);
+  athlete.setCenter(pos);
+  athleteLabel.setPosition(pos);
+  const el = document.getElementById("athlete-text");
+  if (el) el.textContent = text;
+}
+
+function syncDoneLines(upTo) {
+  if (drawnSlice === upTo) return;
+  doneLines.forEach(l => l.setMap(null));
+  doneLines = [];
+  for (let i = 0; i < upTo; i++) {
+    const slice = timeline[i];
+    if (slice.seg.kind === "t") continue;
+    doneLines.push(new AMap.Polyline({
+      path: slice.seg.path, map,
+      strokeColor: slice.seg.color, strokeWeight: 7, strokeOpacity: 1,
+      isOutline: true, outlineColor: "#ffffff", borderWeight: 2,
+      lineJoin: "round", lineCap: "round", zIndex: 170, showDir: true
+    }));
+  }
+  drawnSlice = upTo;
+}
+
+function updateHud() {
+  if (editMode) {
+    document.getElementById("leg-name").textContent = "编辑模式";
+    document.getElementById("leg-sub").textContent = `正在编辑${ROUTE_LABELS[editRoute]}线路 · 可拖动或增删途经点`;
+    document.getElementById("bar-fill").style.width = "0%";
+    if (athlete) athlete.hide();
+    if (athleteLabel) athleteLabel.hide();
+    return;
+  }
+  if (athlete) athlete.show();
+  if (athleteLabel) athleteLabel.show();
+  const meta = RACE_META[race];
+  const pos = locateClock(clock);
+  const seg = pos.slice.seg;
+  const done = pos.done;
+  document.getElementById("leg-name").textContent = seg.name + (seg.laps > 1 ? ` · 第 ${pos.slice.lap + 1}/${seg.laps} 圈` : "");
+  let detail = "";
+  if (seg.kind === "swim") detail = `逆时针绕标 ${pos.into.toFixed(2)} / ${seg.km.toFixed(1)} km`;
+  else if (seg.kind === "bike") detail = `${roadName(pos.f)} · ${pos.into.toFixed(2)} / ${seg.km.toFixed(0)} km`;
+  else if (seg.kind === "run") detail = `${pos.f <= 0.5 ? "去程 · 内侧绿道" : "返程 · 原路折返"} · ${pos.into.toFixed(2)} / ${seg.km.toFixed(2)} km`;
+  else detail = `${seg.name.startsWith("T1") ? "上岸前往换项区" : "前往换项区"} ${(pos.f * 100).toFixed(0)}%`;
+  document.getElementById("leg-sub").textContent = `${detail} · 全程 ${done.toFixed(2)} / ${meta.total} km`;
+  document.getElementById("bar-fill").style.width = (meta.total ? (done / meta.total) * 100 : 0) + "%";
+  const wherePath = seg.path && seg.path.length > 1 ? seg.path : null;
+  if (!wherePath) return;
+  const where = atFraction(wherePath, pos.f);
+  framePlayback(seg);
+  setAthlete(where, seg.name, seg.color);
+  syncDoneLines(pos.i);
+  const flat = sliceFraction(seg.path, pos.f);
+  if (!progressLine) {
+    progressLine = new AMap.Polyline({
+      path: flat, map, strokeColor: seg.color, strokeWeight: 7, strokeOpacity: 1,
+      isOutline: true, outlineColor: "#ffffff", borderWeight: 2,
+      lineJoin: "round", lineCap: "round", zIndex: 180, showDir: true
+    });
+  } else {
+    progressLine.setPath(flat);
+    progressLine.setOptions({ strokeColor: seg.color });
+  }
+}
+
+function stopTimer() {
+  if (timer) cancelAnimationFrame(timer);
+  timer = null;
+  playing = false;
+}
+function setButtons() {
+  document.getElementById("btn-play").disabled = playing || editMode || !bikeRoad || !runRoad;
+  document.getElementById("btn-pause").disabled = !playing;
+  document.getElementById("btn-reset").disabled = !playing && clock <= 0;
+}
+function frame(ts) {
+  if (!playing) return;
+  const dt = Math.min(0.05, (ts - lastTs) / 1000);
+  lastTs = ts;
+  const meta = RACE_META[race];
+  clock = Math.min(totalDur(), clock + dt * speed);
+  updateHud();
+  if (clock >= totalDur() - 0.02) {
+    stopTimer();
+    document.getElementById("leg-name").textContent = "完成";
+    setButtons();
+    return;
+  }
+  timer = requestAnimationFrame(frame);
+}
+function startPlay() {
+  if (playing || editMode) return;
+  if (clock >= totalDur() - 0.02) clock = 0;
+  playing = true;
+  lastTs = performance.now();
+  setButtons();
+  timer = requestAnimationFrame(frame);
+}
+function pausePlay() { stopTimer(); setButtons(); }
+function resetPlay() {
+  stopTimer();
+  clock = 0;
+  updateHud();
+  document.getElementById("leg-name").textContent = "准备就绪";
+  document.getElementById("leg-sub").textContent = raceSummary();
+  setButtons();
+}
+function raceSummary() {
+  const m = RACE_META[race];
+  return `${m.label}：游泳 ${m.swim} km · 骑行 ${45 * m.bikeLaps} km · 跑步 ${(10.55 * m.runLaps).toFixed(2)} km`;
+}
+function switchRace(next) {
+  if (race === next && timeline.length) return;
+  stopTimer();
+  race = next;
+  document.getElementById("btn-olympic").classList.toggle("active", next === "olympic");
+  document.getElementById("btn-113").classList.toggle("active", next === "113");
+  renderCourse();
+  if (editMode) refreshEditTools();
+  else {
+    document.getElementById("leg-name").textContent = "准备就绪";
+    document.getElementById("leg-sub").textContent = raceSummary();
+  }
+  setButtons();
+}
+
+const ANCHOR_KEY = "qd-triathlon-anchors-v2";
+function copyPath(path) { return path.map(p => [p[0], p[1]]); }
+function midOf(path) { return path[Math.round((path.length - 1) / 2)].slice(); }
+const DEFAULT_SWIM = { "113": copyPath(SWIM["113"]), olympic: copyPath(SWIM.olympic) };
+const DEFAULT_BIKE = copyPath(BIKE_OUT);
+const DEFAULT_RUN = copyPath(RUN_OUT);
+const DEFAULT_ANCHORS = {
+  venue: DEFAULT_VENUE.slice(),
+  swimStart: [119.037696, 29.643354],
+  swimFarOd: [119.03961, 29.647485],
+  swimFar113: [119.039542, 29.649289],
+  bikeStart: [119.034269, 29.642338],
+  bikeFar: [119.162406, 29.740787],
+  runStart: [119.034291, 29.64236],
+  runFar: [119.042173, 29.682692]
+};
+function defaultAnchors() {
+  const next = {};
+  Object.keys(DEFAULT_ANCHORS).forEach(key => { next[key] = DEFAULT_ANCHORS[key].slice(); });
+  return next;
+}
+let anchors = defaultAnchors();
+const ROUTE_COLORS = { swim: "#1565c0", exit: "#e07a00", bike: "#2e7d32", run: "#c2185b", venue: "#0b6e8a" };
+const ROUTE_LABELS = { swim: "游泳", exit: "至换项", bike: "骑行", run: "跑步", venue: "换项区" };
+let editRoute = "bike";
+let selectedPointIndex = 0;
+let addingWaypoint = false;
+let editHandles = [];
+let redrawQueued = false;
+let bikeOverride = null;
+let runOverride = null;
+const DEFAULT_BIKE_ROAD = [[119.029131,29.644765],[119.028988,29.644781],[119.028629,29.644827],[119.028353,29.644916],[119.028051,29.645056],[119.027732,29.645281],[119.027505,29.645499],[119.02723,29.645825],[119.027026,29.646114],[119.026223,29.647252],[119.025956,29.647573],[119.025697,29.647794],[119.025572,29.647883],[119.025078,29.648156],[119.02377,29.648824],[119.023286,29.649076],[119.022847,29.649366],[119.022483,29.649666],[119.022194,29.649947],[119.020315,29.651853],[119.01995,29.652292],[119.019656,29.652698],[119.018343,29.654684],[119.018241,29.654812],[119.018478,29.654894],[119.018488,29.654897],[119.021662,29.656415],[119.024223,29.657583],[119.025631,29.658309],[119.026149,29.658736],[119.026548,29.659213],[119.026699,29.659484],[119.026756,29.659756],[119.026807,29.660191],[119.026785,29.660681],[119.026631,29.661175],[119.025134,29.66423],[119.024942,29.665057],[119.0248,29.666333],[119.024758,29.666674],[119.023649,29.675397],[119.023579,29.675768],[119.023473,29.676485],[119.023368,29.676883],[119.023168,29.677329],[119.022899,29.677743],[119.022695,29.677961],[119.022222,29.678409],[119.021965,29.678625],[119.020255,29.680194],[119.020051,29.68042],[119.019817,29.680772],[119.019662,29.681124],[119.019614,29.681476],[119.019576,29.681839],[119.019637,29.6822],[119.01983,29.682686],[119.020059,29.682992],[119.020162,29.683091],[119.020391,29.68328],[119.021017,29.68381],[119.021128,29.683895],[119.021043,29.683995],[119.020934,29.683892],[119.020668,29.683672],[119.020279,29.683367],[119.019944,29.683013],[119.019762,29.682713],[119.019604,29.682416],[119.019507,29.68208],[119.019475,29.681674],[119.019513,29.681358],[119.019598,29.681051],[119.019744,29.680715],[119.019822,29.680585],[119.0199,29.680456],[119.020167,29.680126],[119.020245,29.680046],[119.02112,29.679233],[119.021756,29.678667],[119.021889,29.678538],[119.022024,29.678412],[119.022589,29.67788],[119.022769,29.677684],[119.023062,29.67724],[119.023237,29.676913],[119.023326,29.676638],[119.023391,29.676156],[119.023465,29.675775],[119.023478,29.675665],[119.023516,29.675385],[119.023649,29.675397],[119.023579,29.675768],[119.023473,29.676485],[119.023368,29.676883],[119.023168,29.677329],[119.022899,29.677743],[119.022695,29.677961],[119.022222,29.678409],[119.021965,29.678625],[119.020255,29.680194],[119.020051,29.68042],[119.019817,29.680772],[119.019662,29.681124],[119.019614,29.681476],[119.019576,29.681839],[119.019637,29.6822],[119.01983,29.682686],[119.020059,29.682992],[119.020162,29.683091],[119.020391,29.68328],[119.021017,29.68381],[119.021128,29.683895],[119.02127,29.684003],[119.021374,29.684063],[119.022327,29.68467],[119.023182,29.685187],[119.023727,29.685597],[119.024429,29.686127],[119.025313,29.686658],[119.025826,29.686906],[119.026585,29.68709],[119.027244,29.687134],[119.027706,29.687096],[119.028165,29.686977],[119.028259,29.686953],[119.028363,29.686927],[119.028426,29.68701],[119.028326,29.687035],[119.027987,29.687122],[119.027676,29.687187],[119.027489,29.687211],[119.027298,29.687226],[119.026957,29.687211],[119.026535,29.68717],[119.025925,29.687043],[119.025161,29.686718],[119.024564,29.686361],[119.023982,29.685896],[119.023157,29.68529],[119.02314,29.685278],[119.022788,29.685032],[119.022304,29.68477],[119.021286,29.684128],[119.021043,29.683995],[119.021128,29.683895],[119.02127,29.684003],[119.021374,29.684063],[119.022327,29.68467],[119.023182,29.685187],[119.023727,29.685597],[119.024429,29.686127],[119.025313,29.686658],[119.025826,29.686906],[119.026585,29.68709],[119.027244,29.687134],[119.027706,29.687096],[119.028165,29.686977],[119.028259,29.686953],[119.028363,29.686927],[119.028865,29.686799],[119.029937,29.686542],[119.030037,29.686545],[119.034372,29.685646],[119.035617,29.685388],[119.036989,29.685087],[119.038144,29.684897],[119.038708,29.684806],[119.040527,29.684324],[119.040902,29.684229],[119.041055,29.684195],[119.04115,29.684183],[119.041271,29.684185],[119.041601,29.684224],[119.042082,29.684319],[119.042268,29.684368],[119.043028,29.684541],[119.043438,29.684622],[119.043583,29.684643],[119.043718,29.68465],[119.043893,29.684645],[119.044853,29.684565],[119.045219,29.684554],[119.045605,29.684601],[119.045898,29.684654],[119.046164,29.684698],[119.046436,29.684699],[119.046638,29.684681],[119.046865,29.684656],[119.047193,29.684563],[119.049435,29.683974],[119.049891,29.683855],[119.050706,29.683546],[119.051056,29.6834],[119.051607,29.683167],[119.051896,29.683009],[119.052546,29.682677],[119.053289,29.682391],[119.053313,29.682423],[119.053402,29.682462],[119.05344,29.682478],[119.053588,29.682563],[119.053745,29.682578],[119.053868,29.682576],[119.053929,29.682542],[119.054006,29.682506],[119.054055,29.682469],[119.054086,29.682422],[119.054126,29.682332],[119.054166,29.682243],[119.054279,29.681993],[119.054359,29.681813],[119.054465,29.681564],[119.054522,29.68143],[119.054627,29.681258],[119.054659,29.68116],[119.054654,29.681074],[119.054597,29.680953],[119.054359,29.68068],[119.054305,29.680575],[119.054289,29.680461],[119.0543,29.680358],[119.054335,29.680258],[119.054399,29.680174],[119.054461,29.680118],[119.054571,29.680065],[119.054707,29.680028],[119.054909,29.679976],[119.054984,29.679946],[119.055069,29.679899],[119.055142,29.679834],[119.055222,29.679704],[119.055257,29.67961],[119.055271,29.67951],[119.055246,29.679426],[119.055201,29.679338],[119.054976,29.679128],[119.054898,29.679044],[119.054858,29.678967],[119.054839,29.678897],[119.054847,29.678778],[119.054874,29.678515],[119.054863,29.678401],[119.054812,29.678329],[119.054638,29.678161],[119.054576,29.678063],[119.054541,29.677968],[119.054549,29.677872],[119.054592,29.677783],[119.054654,29.677718],[119.054768,29.677632],[119.054858,29.67757],[119.054953,29.677503],[119.055008,29.677428],[119.055027,29.677369],[119.055021,29.677267],[119.054993,29.67721],[119.054953,29.677178],[119.05489,29.677146],[119.054608,29.677061],[119.054412,29.677005],[119.054318,29.676933],[119.054276,29.676851],[119.054267,29.67676],[119.054361,29.676355],[119.054372,29.676231],[119.05434,29.676082],[119.054297,29.675935],[119.05427,29.675807],[119.054284,29.675721],[119.054335,29.675588],[119.05438,29.675509],[119.054442,29.675437],[119.054622,29.675304],[119.055027,29.675061],[119.055255,29.674957],[119.055525,29.674887],[119.055745,29.674894],[119.056223,29.674849],[119.056306,29.67481],[119.056373,29.674731],[119.056384,29.674619],[119.056384,29.674409],[119.056389,29.674169],[119.056343,29.674034],[119.056274,29.673899],[119.056244,29.673756],[119.056258,29.673628],[119.056338,29.673479],[119.056609,29.673195],[119.056904,29.67295],[119.057017,29.672841],[119.057111,29.672724],[119.057242,29.672493],[119.057314,29.672372],[119.057379,29.67227],[119.057591,29.67196],[119.057811,29.671638],[119.057937,29.671529],[119.058023,29.671459],[119.058194,29.671295],[119.058264,29.671233],[119.05843,29.671111],[119.058591,29.670946],[119.058731,29.670771],[119.05889,29.670642],[119.059096,29.670487],[119.059638,29.670208],[119.059894,29.670149],[119.06021,29.67005],[119.060517,29.669923],[119.060746,29.669796],[119.061063,29.669655],[119.061452,29.669463],[119.061594,29.669432],[119.061902,29.669421],[119.062048,29.669374],[119.062145,29.669319],[119.06222,29.669247],[119.062256,29.669151],[119.062354,29.668471],[119.062449,29.668048],[119.062597,29.668054],[119.06264,29.668113],[119.062821,29.668034],[119.062931,29.667967],[119.06352,29.667582],[119.063703,29.667536],[119.063931,29.667515],[119.064057,29.667455],[119.064211,29.667458],[119.064642,29.667603],[119.064947,29.667677],[119.065321,29.667748],[119.065667,29.667829],[119.065951,29.667956],[119.066163,29.668108],[119.066423,29.668348],[119.066549,29.66849],[119.066651,29.668688],[119.066549,29.66849],[119.066423,29.668348],[119.066163,29.668108],[119.065951,29.667956],[119.065667,29.667829],[119.065321,29.667748],[119.064947,29.667677],[119.064642,29.667603],[119.064211,29.667458],[119.064057,29.667455],[119.063931,29.667515],[119.063703,29.667536],[119.06352,29.667582],[119.062931,29.667967],[119.062821,29.668034],[119.06264,29.668113],[119.062597,29.668054],[119.062449,29.668048],[119.062354,29.668471],[119.062256,29.669151],[119.06222,29.669247],[119.062145,29.669319],[119.062048,29.669374],[119.061902,29.669421],[119.061594,29.669432],[119.061452,29.669463],[119.061063,29.669655],[119.060746,29.669796],[119.060517,29.669923],[119.06021,29.67005],[119.059894,29.670149],[119.059638,29.670208],[119.059096,29.670487],[119.05889,29.670642],[119.058731,29.670771],[119.058591,29.670946],[119.05843,29.671111],[119.058264,29.671233],[119.058194,29.671295],[119.058023,29.671459],[119.057937,29.671529],[119.057811,29.671638],[119.057591,29.67196],[119.057379,29.67227],[119.057314,29.672372],[119.057242,29.672493],[119.057111,29.672724],[119.057017,29.672841],[119.056904,29.67295],[119.056609,29.673195],[119.056338,29.673479],[119.056258,29.673628],[119.056244,29.673756],[119.056274,29.673899],[119.056343,29.674034],[119.056389,29.674169],[119.056384,29.674409],[119.056384,29.674619],[119.056373,29.674731],[119.056306,29.67481],[119.056223,29.674849],[119.055745,29.674894],[119.055525,29.674887],[119.055255,29.674957],[119.055027,29.675061],[119.054622,29.675304],[119.054442,29.675437],[119.05438,29.675509],[119.054335,29.675588],[119.054284,29.675721],[119.05427,29.675807],[119.054297,29.675935],[119.05434,29.676082],[119.054372,29.676231],[119.054361,29.676355],[119.054267,29.67676],[119.054276,29.676851],[119.054318,29.676933],[119.054412,29.677005],[119.054608,29.677061],[119.05489,29.677146],[119.054953,29.677178],[119.054993,29.67721],[119.055021,29.677267],[119.055027,29.677369],[119.055008,29.677428],[119.054953,29.677503],[119.054858,29.67757],[119.054768,29.677632],[119.054654,29.677718],[119.054592,29.677783],[119.054549,29.677872],[119.054541,29.677968],[119.054576,29.678063],[119.054638,29.678161],[119.054812,29.678329],[119.054863,29.678401],[119.054874,29.678515],[119.054847,29.678778],[119.054839,29.678897],[119.054858,29.678967],[119.054898,29.679044],[119.054976,29.679128],[119.055201,29.679338],[119.055246,29.679426],[119.055271,29.67951],[119.055257,29.67961],[119.055222,29.679704],[119.055142,29.679834],[119.055069,29.679899],[119.054984,29.679946],[119.054909,29.679976],[119.054707,29.680028],[119.054571,29.680065],[119.054461,29.680118],[119.054399,29.680174],[119.054335,29.680258],[119.0543,29.680358],[119.054289,29.680461],[119.054305,29.680575],[119.054359,29.68068],[119.054597,29.680953],[119.054654,29.681074],[119.054659,29.68116],[119.054627,29.681258],[119.054522,29.68143],[119.054465,29.681564],[119.054359,29.681813],[119.054279,29.681993],[119.054126,29.682332],[119.054086,29.682422],[119.054055,29.682469],[119.054006,29.682506],[119.053929,29.682542],[119.053868,29.682576],[119.053745,29.682578],[119.053588,29.682563],[119.05344,29.682478],[119.053402,29.682462],[119.053313,29.682423],[119.053289,29.682391],[119.053744,29.682284],[119.053928,29.682235],[119.054112,29.682186],[119.0546,29.682122],[119.054874,29.682096],[119.055198,29.682081],[119.055654,29.68214],[119.056397,29.682284],[119.056828,29.682379],[119.057232,29.682473],[119.058321,29.682727],[119.058792,29.682833],[119.0593,29.682966],[119.059775,29.683167],[119.059932,29.683271],[119.060209,29.683418],[119.06043,29.683489],[119.060617,29.683534],[119.060903,29.683591],[119.061212,29.683646],[119.061825,29.68373],[119.062433,29.683806],[119.062662,29.683825],[119.062792,29.68385],[119.06293,29.683896],[119.063055,29.683961],[119.063162,29.684037],[119.063305,29.684162],[119.063513,29.684379],[119.063624,29.684474],[119.063725,29.684543],[119.063983,29.684686],[119.064363,29.684878],[119.066294,29.685855],[119.066458,29.685936],[119.066692,29.68604],[119.066945,29.686141],[119.067235,29.686248],[119.06811,29.686491],[119.06833,29.686529],[119.068586,29.686557],[119.06876,29.686588],[119.068916,29.686604],[119.069153,29.686648],[119.069394,29.686728],[119.069607,29.686841],[119.069686,29.68691],[119.0698,29.687051],[119.070115,29.687529],[119.070216,29.687727],[119.070392,29.687894],[119.070485,29.68802],[119.070759,29.688221],[119.071195,29.688597],[119.071398,29.68892],[119.071478,29.689103],[119.071532,29.689467],[119.071516,29.689805],[119.071407,29.690092],[119.071268,29.690271],[119.071212,29.6904],[119.071138,29.690537],[119.070896,29.690807],[119.070322,29.691493],[119.069755,29.692158],[119.069348,29.692629],[119.069287,29.692726],[119.069266,29.692813],[119.069274,29.692876],[119.069327,29.693022],[119.069739,29.694063],[119.06996,29.694555],[119.070252,29.695202],[119.07159,29.698206],[119.071889,29.698846],[119.071995,29.699165],[119.072034,29.699376],[119.072024,29.699546],[119.071971,29.699787],[119.071919,29.699898],[119.071796,29.700162],[119.071635,29.700406],[119.071445,29.700761],[119.071368,29.70109],[119.07138,29.701273],[119.071408,29.70151],[119.071487,29.701851],[119.071542,29.701981],[119.071582,29.702037],[119.071719,29.702227],[119.072319,29.70291],[119.073906,29.704817],[119.074155,29.705049],[119.074392,29.705257],[119.07462,29.705378],[119.074825,29.705474],[119.07509,29.705535],[119.075549,29.70554],[119.076203,29.705517],[119.076805,29.705568],[119.077207,29.705675],[119.077501,29.705779],[119.07824,29.706082],[119.078756,29.706293],[119.079013,29.706379],[119.079264,29.706413],[119.079486,29.70642],[119.079685,29.706395],[119.07995,29.706319],[119.080396,29.706065],[119.083238,29.704512],[119.084272,29.704031],[119.084568,29.703912],[119.084769,29.70384],[119.084992,29.703785],[119.085222,29.703758],[119.085444,29.703753],[119.085688,29.703774],[119.087064,29.703981],[119.088861,29.704261],[119.089195,29.704286],[119.089444,29.704263],[119.089666,29.704199],[119.089843,29.704112],[119.090021,29.704006],[119.090606,29.703597],[119.091553,29.702889],[119.091794,29.702748],[119.092022,29.702638],[119.092281,29.702553],[119.092594,29.702505],[119.092975,29.702507],[119.093114,29.702535],[119.09329,29.702571],[119.093586,29.702686],[119.093835,29.702829],[119.094491,29.703266],[119.098417,29.705907],[119.098612,29.706022],[119.098875,29.706146],[119.099211,29.70628],[119.09951,29.70636],[119.100137,29.706491],[119.100386,29.70656],[119.100595,29.706664],[119.100725,29.706753],[119.100889,29.706937],[119.100984,29.707112],[119.101053,29.707277],[119.101115,29.707476],[119.101164,29.707631],[119.101352,29.708222],[119.101426,29.708381],[119.101558,29.70856],[119.101723,29.70871],[119.101865,29.708804],[119.102072,29.708889],[119.102368,29.70896],[119.102683,29.70902],[119.102863,29.709068],[119.103057,29.709133],[119.103263,29.709243],[119.10344,29.709381],[119.103583,29.709524],[119.103697,29.709696],[119.103808,29.709935],[119.103869,29.710158],[119.103935,29.710553],[119.103999,29.710907],[119.104076,29.711245],[119.104163,29.711496],[119.104266,29.711698],[119.104393,29.711896],[119.104482,29.712004],[119.104557,29.712096],[119.104796,29.71237],[119.10502,29.71259],[119.1052,29.712714],[119.10538,29.712802],[119.105571,29.712861],[119.105751,29.712898],[119.106061,29.712907],[119.106325,29.712919],[119.106553,29.712942],[119.106765,29.712986],[119.106939,29.713032],[119.107178,29.713128],[119.107358,29.713236],[119.107604,29.713411],[119.107871,29.713661],[119.108064,29.713845],[119.108225,29.714057],[119.108305,29.714218],[119.10835,29.714421],[119.108371,29.714672],[119.108325,29.714985],[119.108242,29.715369],[119.10821,29.715695],[119.108261,29.715906],[119.108341,29.716083],[119.108439,29.716223],[119.108566,29.716327],[119.108661,29.716405],[119.111776,29.718065],[119.112156,29.718225],[119.112391,29.718394],[119.112624,29.718615],[119.112738,29.718757],[119.112795,29.718828],[119.112895,29.719015],[119.112973,29.719295],[119.113064,29.719616],[119.11321,29.71999],[119.113388,29.720305],[119.113768,29.720906],[119.114163,29.721543],[119.114363,29.722001],[119.114559,29.722579],[119.114666,29.722946],[119.114815,29.723575],[119.11495,29.724089],[119.115083,29.724495],[119.115228,29.724827],[119.11564,29.725501],[119.11593,29.725865],[119.116423,29.72639],[119.116996,29.726978],[119.117427,29.72738],[119.118301,29.728229],[119.118746,29.728616],[119.119399,29.729119],[119.120739,29.729978],[119.124,29.731729],[119.125585,29.732463],[119.126596,29.73298],[119.127822,29.733603],[119.128347,29.73381],[119.128797,29.733918],[119.129325,29.733952],[119.130068,29.733908],[119.13107,29.733798],[119.132614,29.733553],[119.133382,29.733515],[119.133851,29.733465],[119.134265,29.733383],[119.134941,29.73324],[119.135442,29.733189],[119.135628,29.733209],[119.13597,29.733246],[119.136417,29.733393],[119.136782,29.733557],[119.137019,29.733691],[119.137389,29.733961],[119.137559,29.734131],[119.138793,29.735726],[119.140481,29.737878],[119.140768,29.738483],[119.141064,29.739202],[119.141355,29.739679],[119.141594,29.740008],[119.141956,29.740326],[119.142356,29.740566],[119.142751,29.740746],[119.143285,29.740927],[119.143918,29.741115],[119.144315,29.741283],[119.144803,29.741636],[119.145171,29.742071],[119.145601,29.74263],[119.146003,29.743002],[119.146497,29.743268],[119.147017,29.743449],[119.147434,29.743523],[119.148174,29.743605],[119.149671,29.743918],[119.150155,29.743999],[119.150645,29.744034],[119.151101,29.743974],[119.151707,29.743778],[119.152342,29.743524],[119.152784,29.743407],[119.153236,29.743347],[119.153869,29.743354],[119.154936,29.743409],[119.155458,29.743434],[119.155987,29.743456],[119.156463,29.743455],[119.156792,29.743429],[119.156974,29.743407],[119.157,29.743292],[119.157088,29.743115]]; // road-geometry
+const DEFAULT_RUN_ROAD = [[119.02915,29.644763],[119.028988,29.644781],[119.028629,29.644827],[119.028353,29.644916],[119.028051,29.645056],[119.027732,29.645281],[119.027505,29.645499],[119.02723,29.645825],[119.027026,29.646114],[119.026223,29.647252],[119.025956,29.647573],[119.025697,29.647794],[119.025572,29.647883],[119.025078,29.648156],[119.02377,29.648824],[119.023286,29.649076],[119.022847,29.649366],[119.022483,29.649666],[119.022194,29.649947],[119.020315,29.651853],[119.01995,29.652292],[119.019656,29.652698],[119.018343,29.654684],[119.018241,29.654812],[119.018488,29.654897],[119.018488,29.654897],[119.021662,29.656415],[119.024223,29.657583],[119.025631,29.658309],[119.026149,29.658736],[119.026548,29.659213],[119.026699,29.659484],[119.026756,29.659756],[119.026807,29.660191],[119.026785,29.660681],[119.026631,29.661175],[119.025134,29.66423],[119.024942,29.665057],[119.0248,29.666333],[119.024758,29.666674],[119.024645,29.666711],[119.024713,29.666283],[119.024846,29.665182],[119.024968,29.664447],[119.025047,29.66422],[119.026429,29.661458],[119.026661,29.660873],[119.02671,29.660561],[119.026639,29.659863],[119.026548,29.659544],[119.026544,29.659528],[119.026279,29.659052],[119.02597,29.658719],[119.025716,29.658522],[119.025085,29.658167],[119.018416,29.654988],[119.018241,29.654812],[119.018488,29.654897],[119.021662,29.656415],[119.024223,29.657583],[119.025631,29.658309],[119.026149,29.658736],[119.026548,29.659213],[119.026699,29.659484],[119.026756,29.659756],[119.026807,29.660191],[119.026785,29.660681],[119.026631,29.661175],[119.025134,29.66423],[119.024942,29.665057],[119.0248,29.666333],[119.024758,29.666674],[119.023665,29.675269],[119.023649,29.675397],[119.023827,29.675412],[119.026288,29.6763],[119.027541,29.676755],[119.027697,29.676818],[119.027847,29.676889],[119.027971,29.676957],[119.028133,29.677062],[119.028304,29.677192],[119.028494,29.677361],[119.028635,29.677511],[119.028761,29.677673],[119.028894,29.677887],[119.029235,29.678465],[119.029708,29.679291],[119.030021,29.67983],[119.030186,29.680087],[119.030338,29.680273],[119.030476,29.680422],[119.030637,29.680559],[119.030981,29.680825],[119.031886,29.68149],[119.032282,29.681777],[119.034367,29.683326],[119.034462,29.683388],[119.034888,29.683669],[119.035854,29.684306],[119.03687,29.684928],[119.036904,29.684973],[119.036989,29.685087],[119.037006,29.685084]]; // road-geometry
+let bikeRoad = null;
+let runRoad = null;
+let roadPending = { bike: false, run: false };
+let routeSerials = { bike: 0, run: 0 };
+let swimOverrides = { "113": null, olympic: null };
+const BIKE_VIA = [[119.023625,29.652339],[119.024808,29.678079],[119.028116,29.682996],[119.039541,29.68328],[119.059407,29.679889],[119.076842,29.699695],[119.098349,29.700318],[119.117923,29.716484],[119.140848,29.73098]];
+const DEFAULT_RUN_VIA = [[119.02366,29.65229],[119.031578,29.657129],[119.028898,29.67284]];
+const DEFAULT_EXIT = {
+  olympic: [[119.037078,29.643536],[119.036999,29.643318],[119.036708,29.643423],[119.036354,29.642866],[119.0365,29.642793],[119.035981,29.642044],[119.03532,29.642294],[119.03441,29.642415]],
+  "113": []
+};
+let bikeWaypoints = copyPath(BIKE_VIA);
+let runWaypoints = copyPath(DEFAULT_RUN_VIA);
+let exitWaypoints = { olympic: copyPath(DEFAULT_EXIT.olympic), "113": copyPath(DEFAULT_EXIT["113"]) };
+
+function mapOnSegment(p, a, b, na, nb) {
+  const abx = b[0] - a[0], aby = b[1] - a[1];
+  const len2 = abx * abx + aby * aby || 1e-12;
+  const t = ((p[0] - a[0]) * abx + (p[1] - a[1]) * aby) / len2;
+  const ox = p[0] - (a[0] + abx * t);
+  const oy = p[1] - (a[1] + aby * t);
+  const nbx = nb[0] - na[0], nby = nb[1] - na[1];
+  return [na[0] + nbx * t + ox, na[1] + nby * t + oy];
+}
+function reshapeSwim(base, newStart, newFar) {
+  const oldStart = base[0], mid = Math.round((base.length - 1) / 2), oldFar = base[mid];
+  return base.map((p, i) => i <= mid
+    ? mapOnSegment(p, oldStart, oldFar, newStart, newFar)
+    : mapOnSegment(p, oldFar, oldStart, newFar, newStart));
+}
+function replacePath(target, next) {
+  target.length = 0;
+  next.forEach(p => target.push([p[0], p[1]]));
+}
+function rebuildGeometry() {
+  venue[0] = anchors.venue[0];
+  venue[1] = anchors.venue[1];
+  replacePath(SWIM["113"], swimOverrides["113"] || (
+    samePoint(anchors.swimStart, DEFAULT_ANCHORS.swimStart) && samePoint(anchors.swimFar113, DEFAULT_ANCHORS.swimFar113)
+      ? copyPath(DEFAULT_SWIM["113"])
+      : reshapeSwim(DEFAULT_SWIM["113"], anchors.swimStart, anchors.swimFar113)));
+  replacePath(SWIM.olympic, swimOverrides.olympic || (
+    samePoint(anchors.swimStart, DEFAULT_ANCHORS.swimStart) && samePoint(anchors.swimFarOd, DEFAULT_ANCHORS.swimFarOd)
+      ? copyPath(DEFAULT_SWIM.olympic)
+      : reshapeSwim(DEFAULT_SWIM.olympic, anchors.swimStart, anchors.swimFarOd)));
+  replacePath(BIKE_OUT, bikeRoad ? copyPath(bikeRoad) : []);
+  replacePath(RUN_OUT, runRoad ? copyPath(runRoad) : []);
+}
+
+function shorePath(kind = race) {
+  const swim = SWIM[kind];
+  return [swim[swim.length - 1].slice(), ...exitWaypoints[kind].map(p => p.slice()), anchors.venue.slice()];
+}
+function controlPoints(kind = editRoute) {
+  if (kind === "venue") return [anchors.venue];
+  if (kind === "swim") return SWIM[race];
+  if (kind === "exit") return shorePath();
+  if (kind === "bike") return [anchors.bikeStart, ...bikeWaypoints, anchors.bikeFar];
+  return [anchors.runStart, ...runWaypoints, anchors.runFar];
+}
+function pointLabel(index, length) {
+  if (editRoute === "venue") return "换项区";
+  if (index === 0) return editRoute === "exit" ? "游泳出口" : "起点";
+  if (index === length - 1) {
+    if (editRoute === "swim") return "回水点";
+    if (editRoute === "exit") return "换项区";
+    return "折返点";
+  }
+  return `途经点 ${index}`;
+}
+function moveEditPoint(index, lnglat) {
+  const next = [lnglat[0], lnglat[1]];
+  if (editRoute === "venue") {
+    anchors.venue = next;
+  } else if (editRoute === "swim") {
+    if (!swimOverrides[race]) swimOverrides[race] = copyPath(SWIM[race]);
+    swimOverrides[race][index] = next;
+    if (index === 0) anchors.swimStart = next.slice();
+  } else if (editRoute === "exit") {
+    const count = exitWaypoints[race].length + 2;
+    if (index === 0) {
+      if (!swimOverrides[race]) swimOverrides[race] = copyPath(SWIM[race]);
+      swimOverrides[race][swimOverrides[race].length - 1] = next;
+    } else if (index === count - 1) anchors.venue = next;
+    else exitWaypoints[race][index - 1] = next;
+  } else if (editRoute === "bike") {
+    const count = bikeWaypoints.length + 2;
+    if (index === 0) anchors.bikeStart = next;
+    else if (index === count - 1) anchors.bikeFar = next;
+    else bikeWaypoints[index - 1] = next;
+  } else {
+    const count = runWaypoints.length + 2;
+    if (index === 0) anchors.runStart = next;
+    else if (index === count - 1) anchors.runFar = next;
+    else runWaypoints[index - 1] = next;
+  }
+  rebuildGeometry();
+}
+function samePoint(a, b) {
+  return !!a && !!b && Math.abs(a[0] - b[0]) < 1e-7 && Math.abs(a[1] - b[1]) < 1e-7;
+}
+function pathsSame(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  return a.every((p, i) => Math.abs(p[0] - b[i][0]) < 1e-7 && Math.abs(p[1] - b[i][1]) < 1e-7);
+}
+function anchorsCustom() {
+  if (bikeOverride || runOverride || swimOverrides["113"] || swimOverrides.olympic) return true;
+  if (!pathsSame(bikeWaypoints, BIKE_VIA) || !pathsSame(runWaypoints, DEFAULT_RUN_VIA)) return true;
+  if (!pathsSame(exitWaypoints.olympic, DEFAULT_EXIT.olympic) || !pathsSame(exitWaypoints["113"], DEFAULT_EXIT["113"])) return true;
+  return !Object.keys(DEFAULT_ANCHORS).every(key => samePoint(anchors[key], DEFAULT_ANCHORS[key]));
+}
+function anchorExportText() {
+  const round = (p) => [Number(p[0].toFixed(6)), Number(p[1].toFixed(6))];
+  const data = { anchors: {}, routes: {} };
+  ["venue", "swimStart", "swimFarOd", "swimFar113", "bikeStart", "bikeFar", "runStart", "runFar"].forEach(key => {
+    data.anchors[key] = round(anchors[key]);
+  });
+  data.routes.swimOd = SWIM.olympic.map(round);
+  data.routes.swim113 = SWIM["113"].map(round);
+  data.routes.exitOd = shorePath("olympic").map(round);
+  data.routes.exit113 = shorePath("113").map(round);
+  data.routes.bikeWaypoints = bikeWaypoints.map(round);
+  data.routes.runWaypoints = runWaypoints.map(round);
+  data.routes.bikePath = BIKE_OUT.map(round);
+  data.routes.runPath = RUN_OUT.map(round);
+  return JSON.stringify(data, null, 2);
+}
+function copyAnchors() {
+  const text = anchorExportText();
+  const box = document.getElementById("anchor-export");
+  box.value = text;
+  box.classList.add("show");
+  box.focus();
+  box.select();
+  const done = (ok) => {
+    document.getElementById("edit-hint").style.display = "block";
+    document.getElementById("edit-hint").textContent = ok
+      ? "坐标已复制。把这段贴过来，就会写进页面默认数据。"
+      : "坐标已选中。按 Ctrl+C 复制后贴过来，就会写进页面默认数据。";
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => done(true)).catch(() => {
+      try { done(document.execCommand("copy")); } catch (e) { done(false); }
+    });
+  } else {
+    try { done(document.execCommand("copy")); } catch (e) { done(false); }
+  }
+}
+function saveAnchors() {
+  if (!anchorsCustom()) localStorage.removeItem(ANCHOR_KEY);
+  else localStorage.setItem(ANCHOR_KEY, JSON.stringify({
+    anchors,
+    bike: bikeOverride,
+    run: runOverride,
+    swim: swimOverrides,
+    bikeWaypoints,
+    runWaypoints,
+    exitWaypoints
+  }));
+  document.getElementById("btn-restore").disabled = !anchorsCustom();
+}
+function loadPoint(p) {
+  return p && p.length === 2 && p.every(n => Number.isFinite(n)) ? [p[0], p[1]] : null;
+}
+function loadPath(value) {
+  if (!Array.isArray(value) || value.length < 2) return null;
+  const path = [];
+  value.forEach(p => {
+    if (p && p.length === 2 && p.every(n => Number.isFinite(n))) path.push([p[0], p[1]]);
+  });
+  return path.length > 1 ? path : null;
+}
+function loadAnchors() {
+  try {
+    localStorage.removeItem("qd-triathlon-anchors-v1");
+    const raw = localStorage.getItem(ANCHOR_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    const data = saved.anchors || saved;
+    ["venue", "swimStart", "swimFar113", "swimFarOd", "bikeStart", "bikeFar", "runStart", "runFar"].forEach(key => {
+      const p = data[key];
+      if (p && p.length === 2 && p.every(n => Number.isFinite(n))) anchors[key] = [p[0], p[1]];
+    });
+    if (saved.swim) {
+      swimOverrides.olympic = loadPath(saved.swim.olympic);
+      swimOverrides["113"] = loadPath(saved.swim["113"]);
+    }
+    const savedBikeWaypoints = Array.isArray(saved.bikeWaypoints)
+      ? saved.bikeWaypoints.map(p => loadPath([p, p])?.[0]).filter(Boolean)
+      : null;
+    const savedRunWaypoints = Array.isArray(saved.runWaypoints)
+      ? saved.runWaypoints.map(p => loadPath([p, p])?.[0]).filter(Boolean)
+      : null;
+    if (savedBikeWaypoints) bikeWaypoints = savedBikeWaypoints;
+    if (savedRunWaypoints) runWaypoints = savedRunWaypoints;
+    if (saved.exitWaypoints) {
+      ["olympic", "113"].forEach(kind => {
+        const points = Array.isArray(saved.exitWaypoints[kind])
+          ? saved.exitWaypoints[kind].map(p => loadPoint(p)).filter(Boolean)
+          : null;
+        if (points) exitWaypoints[kind] = points;
+      });
+    }
+  } catch (e) { /* keep defaults */ }
+  applyDefaultRoads();
+  rebuildGeometry();
+}
+function controlsMatchDefault(kind) {
+  if (kind === "bike") {
+    return pathsSame(bikeWaypoints, BIKE_VIA)
+      && samePoint(anchors.bikeStart, DEFAULT_ANCHORS.bikeStart)
+      && samePoint(anchors.bikeFar, DEFAULT_ANCHORS.bikeFar);
+  }
+  return pathsSame(runWaypoints, DEFAULT_RUN_VIA)
+    && samePoint(anchors.runStart, DEFAULT_ANCHORS.runStart)
+    && samePoint(anchors.runFar, DEFAULT_ANCHORS.runFar);
+}
+const GCJ_A = 6378245.0;
+const GCJ_EE = 0.00669342162296594323;
+function gcjOutOfChina(lng, lat) {
+  return lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271;
+}
+function gcjTransformLat(lng, lat) {
+  let ret = -100 + 2 * lng + 3 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * Math.sqrt(Math.abs(lng));
+  ret += (20 * Math.sin(6 * lng * Math.PI) + 20 * Math.sin(2 * lng * Math.PI)) * 2 / 3;
+  ret += (20 * Math.sin(lat * Math.PI) + 40 * Math.sin(lat / 3 * Math.PI)) * 2 / 3;
+  ret += (160 * Math.sin(lat / 12 * Math.PI) + 320 * Math.sin(lat * Math.PI / 30)) * 2 / 3;
+  return ret;
+}
+function gcjTransformLng(lng, lat) {
+  let ret = 300 + lng + 2 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * Math.sqrt(Math.abs(lng));
+  ret += (20 * Math.sin(6 * lng * Math.PI) + 20 * Math.sin(2 * lng * Math.PI)) * 2 / 3;
+  ret += (20 * Math.sin(lng * Math.PI) + 40 * Math.sin(lng / 3 * Math.PI)) * 2 / 3;
+  ret += (150 * Math.sin(lng / 12 * Math.PI) + 300 * Math.sin(lng / 30 * Math.PI)) * 2 / 3;
+  return ret;
+}
+function wgs84ToGcj02(lng, lat) {
+  if (gcjOutOfChina(lng, lat)) return [lng, lat];
+  let dLat = gcjTransformLat(lng - 105, lat - 35);
+  let dLng = gcjTransformLng(lng - 105, lat - 35);
+  const radLat = lat / 180 * Math.PI;
+  let magic = Math.sin(radLat);
+  magic = 1 - GCJ_EE * magic * magic;
+  const sqrtMagic = Math.sqrt(magic);
+  dLat = (dLat * 180) / ((GCJ_A * (1 - GCJ_EE)) / (magic * sqrtMagic) * Math.PI);
+  dLng = (dLng * 180) / (GCJ_A / sqrtMagic * Math.cos(radLat) * Math.PI);
+  return [lng + dLng, lat + dLat];
+}
+function gcj02ToWgs84(lng, lat) {
+  if (gcjOutOfChina(lng, lat)) return [lng, lat];
+  let wgsLng = lng;
+  let wgsLat = lat;
+  for (let i = 0; i < 8; i++) {
+    const gcj = wgs84ToGcj02(wgsLng, wgsLat);
+    wgsLng -= gcj[0] - lng;
+    wgsLat -= gcj[1] - lat;
+  }
+  return [wgsLng, wgsLat];
+}
+function toGcjPath(points) {
+  return points.map(p => wgs84ToGcj02(p[0], p[1]));
+}
+function applyDefaultRoads() {
+  if (controlsMatchDefault("bike") && DEFAULT_BIKE_ROAD.length > 1) bikeRoad = toGcjPath(DEFAULT_BIKE_ROAD);
+  if (controlsMatchDefault("run") && DEFAULT_RUN_ROAD.length > 1) runRoad = toGcjPath(DEFAULT_RUN_ROAD);
+}
+function thinPath(pts, max) {
+  if (pts.length <= max) return pts.map(p => p.slice());
+  const thin = [];
+  const step = (pts.length - 1) / (max - 1);
+  for (let i = 0; i < max; i++) thin.push(pts[Math.round(i * step)].slice());
+  thin[thin.length - 1] = pts[pts.length - 1].slice();
+  return thin;
+}
+function roadMessage() {
+  const names = [];
+  if (roadPending.bike) names.push("骑行");
+  if (roadPending.run) names.push("跑步");
+  return names.length
+    ? `正在按公路计算${names.join("和")}路线…`
+    : "骑行和跑步已沿实际公路绘制，并经过每个途经点。";
+}
+function showRoadMessage(text) {
+  const hint = document.getElementById("edit-hint");
+  hint.style.display = "block";
+  if (!editMode) hint.textContent = text;
+  if (!editMode && !playing) document.getElementById("leg-sub").textContent = text;
+}
+function fetchRoad(profile, points) {
+  const wgs = points.map(p => gcj02ToWgs84(p[0], p[1]));
+  const coords = wgs.map(p => `${p[0].toFixed(6)},${p[1].toFixed(6)}`).join(";");
+  const url = `https://router.project-osrm.org/route/v1/${profile}/${coords}?overview=full&geometries=geojson`;
+  return fetch(url).then(res => res.ok ? res.json() : null).then(data => {
+    const line = data && data.code === "Ok" && data.routes && data.routes[0] && data.routes[0].geometry && data.routes[0].geometry.coordinates;
+    if (!line || line.length < 2) return null;
+    const pts = line.map(p => wgs84ToGcj02(p[0], p[1]));
+    pts[0] = points[0].slice();
+    pts[pts.length - 1] = points[points.length - 1].slice();
+    return thinPath(pts, 1400);
+  }).catch(() => null);
+}
+function routeOnRoad(kind) {
+  const serial = ++routeSerials[kind];
+  roadPending[kind] = true;
+  showRoadMessage(roadMessage());
+  const stops = controlPoints(kind);
+  const profiles = kind === "bike" ? ["driving"] : ["foot", "driving"];
+  const tryProfile = (index) => {
+    if (serial !== routeSerials[kind]) return;
+    if (index >= profiles.length) {
+      roadPending[kind] = false;
+      const kept = kind === "bike" ? bikeRoad : runRoad;
+      showRoadMessage(kept
+        ? "公路规划暂时没有连上，仍显示上一次的公路路线。"
+        : `${ROUTE_LABELS[kind]}路线没有规划到公路，请把途经点移到道路附近。`);
+      setButtons();
+      return;
+    }
+    fetchRoad(profiles[index], stops).then(road => {
+      if (serial !== routeSerials[kind]) return;
+      if (!road) { tryProfile(index + 1); return; }
+      roadPending[kind] = false;
+      if (kind === "bike") bikeRoad = road;
+      else runRoad = road;
+      rebuildGeometry();
+      saveAnchors();
+      renderCourse();
+      if (editMode) refreshEditTools();
+      showRoadMessage(roadMessage());
+      setButtons();
+    });
+  };
+  tryProfile(0);
+}
+function pinHtml(label, color, active) {
+  const size = active ? 22 : 16;
+  return `<div class="edit-pin" style="width:${size}px;height:${size}px;background:${color}"><span>${label}</span></div>`;
+}
+function selectEditPoint(index) {
+  const points = controlPoints();
+  selectedPointIndex = Math.max(0, Math.min(index, points.length - 1));
+  editHandles.forEach((h, i) => {
+    const on = i === selectedPointIndex;
+    h.marker.setzIndex(on ? 640 : 430);
+    h.marker.setContent(pinHtml(pointLabel(i, points.length), ROUTE_COLORS[editRoute], on));
+  });
+  document.querySelectorAll("#point-grid button").forEach((btn, i) => {
+    btn.classList.toggle("active", i === selectedPointIndex);
+  });
+  const pos = points[selectedPointIndex];
+  const label = pointLabel(selectedPointIndex, points.length);
+  document.getElementById("edit-hint").textContent =
+    `${ROUTE_LABELS[editRoute]} · ${label}  ${pos[0].toFixed(6)}, ${pos[1].toFixed(6)} · 可直接拖动`;
+  document.getElementById("btn-delete-point").disabled =
+    editRoute === "venue" || selectedPointIndex === 0 || selectedPointIndex === points.length - 1;
+}
+function clearEditHandles() {
+  editHandles.forEach(h => h.marker.setMap(null));
+  editHandles = [];
+}
+function syncEditHandles() {
+  const points = controlPoints();
+  if (!editMode) {
+    clearEditHandles();
+    return;
+  }
+  if (editHandles.length !== points.length) {
+    rebuildEditHandles();
+    return;
+  }
+  editHandles.forEach((h, i) => {
+    h.marker.setMap(map);
+    if (i !== draggingId) h.marker.setPosition(points[i]);
+  });
+}
+function queueRedraw() {
+  if (redrawQueued) return;
+  redrawQueued = true;
+  requestAnimationFrame(() => {
+    redrawQueued = false;
+    renderCourse();
+    if (editMode) selectEditPoint(selectedPointIndex);
+  });
+}
+function rebuildEditHandles() {
+  if (typeof AMap === "undefined") return;
+  clearEditHandles();
+  const points = controlPoints();
+  const grid = document.getElementById("point-grid");
+  grid.innerHTML = "";
+  points.forEach((point, index) => {
+    const label = pointLabel(index, points.length);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = label;
+    btn.title = `${point[0].toFixed(6)}, ${point[1].toFixed(6)}`;
+    btn.onclick = () => {
+      selectEditPoint(index);
+      map.panTo(point);
+    };
+    grid.appendChild(btn);
+    const marker = new AMap.Marker({
+      position: point,
+      map,
+      draggable: true,
+      cursor: "grab",
+      zIndex: 430,
+      offset: new AMap.Pixel(0, 0),
+      content: pinHtml(label, ROUTE_COLORS[editRoute], false)
+    });
+    marker.on("mousedown", () => selectEditPoint(index));
+    marker.on("dragging", (ev) => {
+      draggingId = index;
+      moveEditPoint(index, [ev.lnglat.getLng(), ev.lnglat.getLat()]);
+      queueRedraw();
+    });
+    marker.on("dragend", () => {
+      draggingId = null;
+      if (editRoute === "bike" || editRoute === "run") routeOnRoad(editRoute);
+      else {
+        saveAnchors();
+        queueRedraw();
+      }
+    });
+    editHandles.push({ marker });
+  });
+  selectedPointIndex = Math.min(selectedPointIndex, points.length - 1);
+  selectEditPoint(selectedPointIndex);
+}
+function refreshEditTools() {
+  document.querySelectorAll("#route-grid button").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.route === editRoute);
+  });
+  const add = document.getElementById("btn-add-point");
+  add.disabled = editRoute === "venue";
+  add.classList.toggle("active", addingWaypoint);
+  add.textContent = addingWaypoint ? "点击地图放置…" : "＋ 增加途经点";
+  rebuildEditHandles();
+}
+function switchEditRoute(kind) {
+  editRoute = kind;
+  selectedPointIndex = 0;
+  addingWaypoint = false;
+  refreshEditTools();
+}
+function nearestSegmentIndex(points, point) {
+  let best = 0, bestDistance = Infinity;
+  const cos = Math.cos(point[1] * Math.PI / 180);
+  for (let i = 0; i < points.length - 1; i++) {
+    const ax = points[i][0] * cos, ay = points[i][1];
+    const bx = points[i + 1][0] * cos, by = points[i + 1][1];
+    const px = point[0] * cos, py = point[1];
+    const dx = bx - ax, dy = by - ay;
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy || 1)));
+    const d = (px - ax - dx * t) ** 2 + (py - ay - dy * t) ** 2;
+    if (d < bestDistance) { bestDistance = d; best = i; }
+  }
+  return best;
+}
+function addWaypointAt(point) {
+  if (editRoute === "venue") return;
+  const segment = nearestSegmentIndex(controlPoints(), point);
+  if (editRoute === "swim") {
+    if (!swimOverrides[race]) swimOverrides[race] = copyPath(SWIM[race]);
+    swimOverrides[race].splice(segment + 1, 0, point);
+  } else if (editRoute === "exit") {
+    exitWaypoints[race].splice(segment, 0, point);
+  } else if (editRoute === "bike") {
+    bikeWaypoints.splice(segment, 0, point);
+  } else {
+    runWaypoints.splice(segment, 0, point);
+  }
+  selectedPointIndex = segment + 1;
+  addingWaypoint = false;
+  rebuildGeometry();
+  renderCourse();
+  refreshEditTools();
+  if (editRoute === "bike" || editRoute === "run") routeOnRoad(editRoute);
+  else saveAnchors();
+}
+function deleteSelectedWaypoint() {
+  const points = controlPoints();
+  if (editRoute === "venue" || selectedPointIndex <= 0 || selectedPointIndex >= points.length - 1) return;
+  if (editRoute === "swim") {
+    if (!swimOverrides[race]) swimOverrides[race] = copyPath(SWIM[race]);
+    swimOverrides[race].splice(selectedPointIndex, 1);
+  } else if (editRoute === "exit") {
+    exitWaypoints[race].splice(selectedPointIndex - 1, 1);
+  } else if (editRoute === "bike") {
+    bikeWaypoints.splice(selectedPointIndex - 1, 1);
+  } else {
+    runWaypoints.splice(selectedPointIndex - 1, 1);
+  }
+  selectedPointIndex = Math.max(0, selectedPointIndex - 1);
+  rebuildGeometry();
+  renderCourse();
+  refreshEditTools();
+  if (editRoute === "bike" || editRoute === "run") routeOnRoad(editRoute);
+  else saveAnchors();
+}
+function setEditMode(on) {
+  if (on) {
+    pausePlay();
+    clock = 0;
+  }
+  editMode = on;
+  addingWaypoint = false;
+  document.getElementById("btn-edit").classList.toggle("active", on);
+  document.querySelector(".panel").classList.toggle("editing", on);
+  renderCourse();
+  if (on) refreshEditTools();
+  else {
+    clearEditHandles();
+    document.getElementById("leg-name").textContent = "准备就绪";
+    document.getElementById("leg-sub").textContent = raceSummary();
+  }
+  setButtons();
+  document.getElementById("btn-restore").disabled = !anchorsCustom();
+}
+function restoreAnchors() {
+  localStorage.removeItem(ANCHOR_KEY);
+  bikeOverride = null;
+  runOverride = null;
+  swimOverrides = { "113": null, olympic: null };
+  exitWaypoints = { olympic: copyPath(DEFAULT_EXIT.olympic), "113": copyPath(DEFAULT_EXIT["113"]) };
+  bikeWaypoints = copyPath(BIKE_VIA);
+  runWaypoints = copyPath(DEFAULT_RUN_VIA);
+  anchors = defaultAnchors();
+  applyDefaultRoads();
+  rebuildGeometry();
+  renderCourse();
+  if (editMode) refreshEditTools();
+  routeOnRoad("bike");
+  routeOnRoad("run");
+  document.getElementById("btn-restore").disabled = true;
+}
+loadAnchors();
+
+function initMap() {
+  map = new AMap.Map("map", {
+    viewMode: "3D",
+    pitch: 48,
+    rotation: -18,
+    zoom: 13.2,
+    zooms: [11, 18],
+    center: [119.08, 29.69],
+    layers: [
+      new AMap.TileLayer.Satellite(),
+      new AMap.TileLayer.RoadNet({ opacity: 0.35, zIndex: 2 })
+    ]
+  });
+  map.addControl(new AMap.Scale());
+  map.addControl(new AMap.ToolBar({ position: "RB" }));
+  if (AMap.ControlBar) {
+    map.addControl(new AMap.ControlBar({ position: { right: "16px", top: "16px" } }));
+  }
+  map.on("click", (ev) => {
+    if (!editMode || !addingWaypoint) return;
+    addWaypointAt([ev.lnglat.getLng(), ev.lnglat.getLat()]);
+  });
+  map.on("complete", () => {
+    renderCourse();
+    setButtons();
+    if (bikeRoad && runRoad) showRoadMessage(roadMessage());
+    if (!bikeRoad || !controlsMatchDefault("bike")) routeOnRoad("bike");
+    if (!runRoad || !controlsMatchDefault("run")) routeOnRoad("run");
+  });
+}
+
+document.getElementById("btn-olympic").onclick = () => switchRace("olympic");
+document.getElementById("btn-113").onclick = () => switchRace("113");
+document.getElementById("btn-play").onclick = startPlay;
+document.getElementById("btn-pause").onclick = pausePlay;
+document.getElementById("btn-reset").onclick = resetPlay;
+document.getElementById("btn-edit").onclick = () => setEditMode(!editMode);
+document.getElementById("btn-copy").onclick = copyAnchors;
+document.getElementById("btn-restore").onclick = restoreAnchors;
+document.getElementById("btn-restore").disabled = !anchorsCustom();
+document.querySelectorAll("#route-grid button").forEach(btn => {
+  btn.onclick = () => switchEditRoute(btn.dataset.route);
+});
+document.getElementById("btn-add-point").onclick = () => {
+  if (editRoute === "venue") return;
+  addingWaypoint = !addingWaypoint;
+  refreshEditTools();
+  document.getElementById("edit-hint").textContent = addingWaypoint
+    ? `在地图上点击，为${ROUTE_LABELS[editRoute]}线路增加途经点`
+    : "已取消增加途经点";
+};
+document.getElementById("btn-delete-point").onclick = deleteSelectedWaypoint;
+document.querySelectorAll(".speeds button").forEach(btn => {
+  btn.onclick = () => {
+    speed = Number(btn.dataset.speed);
+    document.querySelectorAll(".speeds button").forEach(b => b.classList.toggle("active", b === btn));
+  };
+});
+document.getElementById("bar").onclick = (ev) => {
+  const rect = ev.currentTarget.getBoundingClientRect();
+  const f = Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width));
+  if (editMode) return;
+  clock = clockForKm(f * RACE_META[race].total);
+  updateHud();
+  setButtons();
+};
+window.addEventListener("keydown", (ev) => {
+  if (ev.code === "Space" && !editMode) { ev.preventDefault(); playing ? pausePlay() : startPlay(); }
+});
+
+window.onload = function () {
+  const script = document.createElement("script");
+  script.src = "https://webapi.amap.com/maps?v=2.0&key=da5acba64b5928a50615ff63536596a9&plugin=AMap.Scale,AMap.ToolBar,AMap.ControlBar";
+  script.onload = () => {
+    if (typeof AMap === "undefined") { alert("高德地图没有加载成功，请检查 Key 与网络。"); return; }
+    initMap();
+  };
+  document.head.appendChild(script);
+};
+</script>
+</body>
+</html>
